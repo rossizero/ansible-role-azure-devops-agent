@@ -50,7 +50,12 @@
   become: true
   changed_when: false
   check_mode: no
-
+- debug:
+    msg:
+    - "Dependency lookup variables are :"
+    - "URLURLURL: {{ az_devops_agent_package_url }}"
+    - "System architecture is: {{ ansible_architecture }}"
+    - "The unique machine ID for {{ inventory_hostname }} is: {{ ansible_machine_id }}"
 - name: Check agent version
   command: ./bin/Agent.Listener --version
   become: true
@@ -87,6 +92,17 @@
     service_is_installed: "{{ svc_status.stdout is defined and svc_status.stdout is not regex('not installed') }}"
     service_is_running: "{{ svc_status.stdout is defined and svc_status.stdout is regex('active \\(running\\)') }}"
     is_requested_version: "{{ bin_agent_listener.stat.exists and agent_listener_version.stdout is defined and agent_listener_version.stdout == az_devops_agent_version }}"
+    agent_cmd_args_combined:
+      - "./config.sh"
+      - "--unattended"
+      - "--acceptteeeula"
+      - "--url '{{ az_devops_server_url }}'"
+      - "--work '{{ az_devops_work_folder }}'"
+      - "--auth PAT"
+      - "--token '{{ az_devops_accesstoken }}'"
+      - "--runasservice"
+      - "--pool '{{ az_devops_agent_pool_name }}'"
+      - "--agent '{{ az_devops_agent_name }}'"
 
 - name: Determine if the agent should be reconfigured or replaced
   set_fact:
@@ -139,14 +155,14 @@
 
 - name: Add '--replace' configuration argument
   set_fact:
-    build_agent_cmd_args: "{{ build_agent_cmd_args }} + ['--replace']"
-    deployment_agent_cmd_args: "{{ build_agent_cmd_args }} + ['--replace']"
-    resource_agent_cmd_args: "{{ resource_agent_cmd_args }} + ['--replace']"
+    build_agent_cmd_args: "{{ build_agent_cmd_args + ['--replace'] }}"
+    deployment_agent_cmd_args: "{{ build_agent_cmd_args + ['--replace'] }}"
+    resource_agent_cmd_args: "{{ resource_agent_cmd_args + ['--replace'] }}"
   when:
     - az_devops_agent_replace_existing
 
 - name: Configure agent as a build server
-  command: "{{ (agent_cmd_args + build_agent_cmd_args) | join(' ') }}"
+  command: "{{ (agent_cmd_args_combined) | join(' ') }}"
   args:
     chdir: "{{ az_devops_agent_folder }}"
     creates: "{{ az_devops_agent_folder }}/.agent"
@@ -184,7 +200,7 @@
     section: null
     option: "{{ item.key }}"
     value: "{{ item.value }}"
-    no_extra_spaces: yes
+    no_extra_spaces: true 
     owner: "{{ az_devops_agent_user }}"
     group: "{{ az_devops_agent_group }}"
   loop: "{{ az_devops_agent_user_capabilities | default({}) | dict2items }}"
